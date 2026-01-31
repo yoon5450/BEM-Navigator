@@ -34,7 +34,6 @@ export async function activate(context: vscode.ExtensionContext) {
         ['vue', 'pug', 'html'],
         {
             async provideDefinition(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Definition | vscode.LocationLink[] | null> {
-
                 const range = getBemRange(document, position);
                 
                 if (!range) {
@@ -51,6 +50,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 const styleRegex = /<style[^>]*lang="stylus"[^>]*>([\s\S]*?)<\/style>/g;
                 let match;
                 
+                // 1. 현재 파일에서 우선 탐색
                 while ((match = styleRegex.exec(text)) !== null) {
                     if (token.isCancellationRequested) return null;
                     const styleContent = match[1];
@@ -71,26 +71,19 @@ export async function activate(context: vscode.ExtensionContext) {
                     }
                 }
 
-                // --- [2단계: 열려 있는 다른 Stylus 탭 탐색] ---
-                const openTabs = vscode.workspace.textDocuments.filter(doc => 
-                    (doc.languageId === 'stylus' || doc.fileName.endsWith('.styl')) && 
-                    doc.uri.toString() !== document.uri.toString()
-                );
+                // 2. 캐시 매니저를 통해 외부 파일 탐색
+                const cachedResult = cacheManager.findInCache(target);
+                if (cachedResult) {
+                    const { uri, symbol } = cachedResult;
+                    const targetPos = new vscode.Position(symbol.line, symbol.character);
+                    const targetRange = new vscode.Range(targetPos, targetPos);
 
-                for (const tab of openTabs) {
-                    const symbols = parseStylus(tab.getText());
-                    const found = symbols.find(s => s.fullSelector === `.${target}` || s.fullSelector === target);
-                    
-                    if (found) {
-                        const p = new vscode.Position(found.line, found.character);
-                        const r = new vscode.Range(p, p);
-                        return [{
-                            targetUri: tab.uri,
-                            targetRange: r,
-                            targetSelectionRange: r,
-                            originSelectionRange: range,
-                        }];
-                    }
+                    return [{
+                        originSelectionRange: range,
+                        targetUri: uri,
+                        targetRange: targetRange,
+                        targetSelectionRange: targetRange
+                    }];
                 }
 
                 return null;
