@@ -11,12 +11,13 @@ export class StyleCacheManager {
      */
     public async updateCache(uri: vscode.Uri): Promise<void> {
         try {
-            const document = await vscode.workspace.openTextDocument(uri);
-            const symbols = parseStylus(document.getText());
+            // 파일을 에디터로 열지 않고 바이너리로 직접 읽어서 처리 (성능 최적화)
+            const fileData = await vscode.workspace.fs.readFile(uri);
+            const content = Buffer.from(fileData).toString('utf8');
+            const symbols = parseStylus(content);
             this.cache.set(uri.toString(), symbols);
-            console.log(`[Cache] Updated: ${uri.fsPath}`);
         } catch (e) {
-            console.error(`[Cache] Failed to update: ${uri.fsPath}`, e);
+            console.error(`[Cache Error] ${uri.fsPath}`, e);
         }
     }
 
