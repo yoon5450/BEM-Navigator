@@ -6,6 +6,7 @@ import { getBemRange } from './utils/getBemRange';
 import { StyleSymbol } from './types/StyleSymbol';
 
 // 현재 문서의 파싱 결과를 캐싱하기 위한 변수
+// NOTE: 같은 파일 내부 탐색은 연산부하가 높지 않으므로, 문제 발생할 시 제거
 let documentCache: {
     uri: string;
     version: number;
@@ -47,9 +48,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(watcher);
 
-    // 프로젝트 폴더별로 src/style 내 파일들을 백그라운드 인덱싱
+    // 프로젝트 폴더별로 src/style, styles 내 파일들을 백그라운드 인덱싱
     vscode.workspace.workspaceFolders?.forEach(folder => {
-        const pattern = new vscode.RelativePattern(folder, 'src/style/**/*.styl');
+        const pattern = new vscode.RelativePattern(folder, 'src/{style,styles}/**/*.styl');
         vscode.workspace.findFiles(pattern, '**/node_modules/**').then(async (files) => {
             for (const file of files) {
                 await cacheManager.updateCache(file);
