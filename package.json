@@ -10,7 +10,11 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:vue"
+    "onLanguage:vue",
+    "onLanguage:pug",
+    "onLanguage:html",
+    "onLanguage:stylus",
+    "onWorkspaceContains:**/*.styl"
   ],
   "main": "./dist/extension.js",
   "contributes": {
