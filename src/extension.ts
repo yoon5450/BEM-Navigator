@@ -55,19 +55,14 @@ export async function activate(context: vscode.ExtensionContext) {
   // 심볼릭 고려
   // 프로젝트 폴더별로 src/style, styles 내 파일들을 백그라운드 인덱싱
   vscode.workspace.workspaceFolders?.forEach((folder) => {
-    // 1. 패턴을 최대한 넓게 잡으세요. (src/style... 같은 제한적인 폴더 대신)
     const pattern = new vscode.RelativePattern(folder, "**/*.styl");
 
-    // 2. maxResults 인자를 아예 제거하거나 매우 크게 잡으세요.
     vscode.workspace
       .findFiles(pattern, "**/node_modules/**")
       .then(async (files) => {
         console.log(`📂 [${folder.name}] 검색된 총 파일 수: ${files.length}`);
 
-        // 3. 8만 커밋이면 파일이 수천 개일 수 있으니,
-        // 한꺼번에 처리하지 말고 Chunk(덩어리) 단위로 처리하거나 비동기로 태우세요.
         for (const file of files) {
-          // await을 빼서 루프가 멈추지 않게 함
           cacheManager.updateCache(file);
         }
       });
@@ -153,25 +148,29 @@ export async function activate(context: vscode.ExtensionContext) {
         }
 
         // 2. 캐시 매니저를 통해 외부 파일 탐색
-        const cachedResult = cacheManager.findInFolder(
-          target,
-          currentFolder.uri,
-        );
-        if (cachedResult) {
-          const { uri, symbol } = cachedResult;
-          const targetPos = new vscode.Position(symbol.line, symbol.character);
-          const targetRange = new vscode.Range(targetPos, targetPos);
+        const cachedResults = cacheManager.findInFolder(target, document.uri);
 
-          return [
-            {
+        if (cachedResults && cachedResults.length > 0) {
+          return cachedResults.map((res) => {
+            // res.symbol.line이 number 타입인지 확인 (never 방지)
+            const line =
+              typeof res.symbol.line === "number" ? res.symbol.line : 0;
+            const char =
+              typeof res.symbol.character === "number"
+                ? res.symbol.character
+                : 0;
+
+            const targetPos = new vscode.Position(line, char);
+            const targetRange = new vscode.Range(targetPos, targetPos);
+
+            return {
               originSelectionRange: range,
-              targetUri: uri,
+              targetUri: res.uri,
               targetRange: targetRange,
               targetSelectionRange: targetRange,
-            },
-          ];
+            };
+          });
         }
-
         return null;
       },
     },
