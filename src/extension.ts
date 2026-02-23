@@ -19,18 +19,19 @@ export async function activate(context: vscode.ExtensionContext) {
 
   const activeEditor = vscode.window.activeTextEditor;
   if (activeEditor) {
-    // 현재 파일과 같은 폴더의 .styl 파일들을 가장 먼저 인덱싱
-    const currentDir = new vscode.RelativePattern(
-      vscode.workspace.getWorkspaceFolder(activeEditor.document.uri) || "",
-      "**/*.styl",
+    const folder = vscode.workspace.getWorkspaceFolder(
+      activeEditor.document.uri,
     );
-    const priorityFiles = await vscode.workspace.findFiles(
-      currentDir,
-      "**/node_modules/**",
-      10,
-    );
-    for (const file of priorityFiles) {
-      await cacheManager.updateCache(file);
+    if (folder) {
+      const currentDir = new vscode.RelativePattern(folder, "**/*.styl");
+      const priorityFiles = await vscode.workspace.findFiles(
+        currentDir,
+        "**/node_modules/**",
+        10,
+      );
+      for (const file of priorityFiles) {
+        await cacheManager.updateCache(file);
+      }
     }
   }
 
@@ -95,7 +96,6 @@ export async function activate(context: vscode.ExtensionContext) {
         console.log(`찾는 대상: [${target}]`);
 
         // 1. 현재 파일 파싱 (캐시 활용)
-        // document.version은 파일이 수정될 때마다 증가하므로, 버전이 같으면 파일이 변경되지 않았음을 보장합니다.
         let parsedStyles: { symbols: StyleSymbol[]; offset: number }[] = [];
 
         if (
@@ -152,7 +152,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (cachedResults && cachedResults.length > 0) {
           return cachedResults.map((res) => {
-            // res.symbol.line이 number 타입인지 확인 (never 방지)
             const line =
               typeof res.symbol.line === "number" ? res.symbol.line : 0;
             const char =

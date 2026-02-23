@@ -6,11 +6,17 @@ import * as fs from "fs";
 
 export class StyleCacheManager {
   // 파일 URI 문자열을 키로 사용하는 캐시 저장소
-  private cache = new Map<string, StyleSymbol[]>();
+  private cache = new Map<
+    string,
+    { uri: vscode.Uri; symbols: StyleSymbol[] }
+  >();
+  // 해당 프로젝트 루트 정보를 가지는 캐시 저장소
+  private rootCache = new Map<string, string>();
 
   private normalizePath(pathOrUri: string | vscode.Uri): string {
-    const path = typeof pathOrUri === "string" ? pathOrUri : pathOrUri.fsPath;
-    return path.toLowerCase().replace(/\\/g, "/");
+    const pathStr =
+      typeof pathOrUri === "string" ? pathOrUri : pathOrUri.toString();
+    return pathStr.toLowerCase();
   }
 
   /**
@@ -28,8 +34,7 @@ export class StyleCacheManager {
       const content = Buffer.from(fileData).toString("utf8");
       const symbols = parseStylus(content);
 
-      this.cache.set(uriStr, symbols);
-      // 로그를 찍어서 실제로 파일이 캐싱되는지 확인하세요!
+      this.cache.set(uriStr, { uri, symbols });
       console.log(`[Cache] Indexed: ${uriStr} (${symbols.length} symbols)`);
     } catch (e) {
       console.error(`[Cache Error] ${uri.fsPath}`, e);
@@ -51,14 +56,14 @@ export class StyleCacheManager {
   public findInCache(
     target: string,
   ): { uri: vscode.Uri; symbol: StyleSymbol } | null {
-    for (const [cachedPath, symbols] of this.cache) {
+    for (const [_, data] of this.cache) {
       // key 이름도 cachedPath로 바꾸면 더 직관적이죠
-      const found = symbols.find(
+      const found = data.symbols.find(
         (s) => s.fullSelector === `.${target}` || s.fullSelector === target,
       );
       if (found) {
         return {
-          uri: vscode.Uri.file(cachedPath),
+          uri: data.uri,
           symbol: found,
         };
       }
@@ -76,13 +81,11 @@ export class StyleCacheManager {
     target: string,
     currentDocUri: vscode.Uri,
   ): { uri: vscode.Uri; symbol: StyleSymbol; score: number }[] {
-    const currentPath = this.normalizePath(currentDocUri.fsPath);
-    const currentProjectRoot = this.getActualProjectRoot(currentPath);
+    const currentPath = this.normalizePath(currentDocUri);
+    const currentProjectRoot = this.getActualProjectRoot(currentDocUri);
     const targetSelector =
       target.startsWith(".") || target.startsWith("#") ? target : `.${target}`;
 
-    console.log(`\n🔍 [Find] Target: "${targetSelector}"`);
-    console.log(`📂 [Context] File: ${currentPath}`);
     console.log(`🏠 [Context] Root: ${currentProjectRoot}`);
 
     let matches: {
@@ -93,21 +96,19 @@ export class StyleCacheManager {
 
     let projectFileCount = 0;
 
-    for (const [originalCachedPath, symbols] of this.cache) {
-      const cachedPath = this.normalizePath(originalCachedPath);
-      const cachedFileRoot = this.getActualProjectRoot(cachedPath);
+    for (const [_, data] of this.cache) {
+      const cachedPath = this.normalizePath(data.uri);
+      const cachedFileRoot = this.getActualProjectRoot(data.uri);
 
-      // [Step 1] 프로젝트 루트 필터링 로그
+      // [Step 1] 프로젝트 루트 필터링
       if (cachedFileRoot !== currentProjectRoot) {
-        // 너무 노이즈가 심하면 주석 처리하세요. 다른 프로젝트 파일임을 알리는 로그입니다.
-        // console.log(`⏩ [Skip] Different Root: ${cachedPath} (Root: ${cachedFileRoot})`);
         continue;
       }
 
       projectFileCount++;
 
       // [Step 2] 매칭 시도
-      const foundSymbols = symbols.filter((s) => {
+      const foundSymbols = data.symbols.filter((s) => {
         return (
           s.fullSelector === targetSelector ||
           s.fullSelector.endsWith(" " + targetSelector)
@@ -121,11 +122,11 @@ export class StyleCacheManager {
           const totalScore = distance + purityBonus;
 
           console.log(
-            `✅ [Match] ${path.basename(cachedPath)} | Score: ${totalScore} (Dist: ${distance}, Purity: ${purityBonus}) | Selector: ${symbol.fullSelector}`,
+            `[Match] ${path.basename(cachedPath)} | Score: ${totalScore} (Dist: ${distance}, Purity: ${purityBonus}) | Selector: ${symbol.fullSelector}`,
           );
 
           matches.push({
-            uri: vscode.Uri.file(originalCachedPath),
+            uri: data.uri,
             symbol: symbol,
             score: totalScore,
           });
@@ -172,34 +173,17 @@ export class StyleCacheManager {
   }
   // src/utils/styleCacheManager.ts
 
-  private getActualProjectRoot(filePath: string): string {
-    let currentDir = path.dirname(this.normalizePath(filePath));
-    const root = path.parse(currentDir).root;
+  private getActualProjectRoot(uri: vscode.Uri): string {
+    const uriStr = this.normalizePath(uri);
+    const dirPath = path.dirname(uriStr);
 
-    // 위로 올라가며 package.json을 찾되, 가장 먼저 발견되는 곳을 Root로 함
-    while (currentDir !== root) {
-      const packageJsonPath = path.join(currentDir, "package.json");
+    if (this.rootCache.has(dirPath)) return this.rootCache.get(dirPath)!;
 
-      if (fs.existsSync(packageJsonPath)) {
-        // 찾았다! /users/yoon/mohaet-dup/web_solar_bank 같은 곳에서 멈춤
-        return this.normalizePath(currentDir);
-      }
+    // VSCode API를 사용하여 워크스페이스 폴더를 루트로 사용 (가장 확실한 방법)
+    const folder = vscode.workspace.getWorkspaceFolder(uri);
+    const root = folder ? this.normalizePath(folder.uri) : dirPath;
 
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) break;
-      currentDir = parentDir;
-    }
-
-    // package.json이 없는 경우를 대비한 Fallback -> 회사 디렉터리 구조에서만 유효.
-    const parts = filePath.split("/");
-    const webIndex = parts.findIndex((p) => p.startsWith("web"));
-    if (webIndex !== -1) {
-      return parts.slice(0, webIndex + 1).join("/");
-    }
-
-    return this.normalizePath(
-      vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath))?.uri
-        .fsPath || currentDir,
-    );
+    this.rootCache.set(dirPath, root);
+    return root;
   }
 }
