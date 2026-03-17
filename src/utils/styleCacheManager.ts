@@ -153,7 +153,9 @@ export class StyleCacheManager {
   /**
    * 자동완성을 위해 현재 프로젝트의 모든 캐시된 클래스 목록을 반환합니다.
    */
-  public getCompletionItems(currentDocUri: vscode.Uri): vscode.CompletionItem[] {
+  public getCompletionItems(
+    currentDocUri: vscode.Uri,
+  ): vscode.CompletionItem[] {
     const items: vscode.CompletionItem[] = [];
     const uniqueClasses = new Set<string>();
     const currentProjectRoot = this.getActualProjectRoot(currentDocUri);
@@ -162,10 +164,16 @@ export class StyleCacheManager {
       if (this.getActualProjectRoot(data.uri) !== currentProjectRoot) continue;
 
       for (const symbol of data.symbols) {
-        const className = symbol.fullSelector.replace(/^[.#]/, "");
+        // 띄어쓰기가 포함된 자손 선택자일 경우 마지막 클래스명만 추출 (예: ".calc .calc-popup" -> ".calc-popup")
+        const parts = symbol.fullSelector.split(" ");
+        const lastSelector = parts[parts.length - 1];
+        const className = lastSelector.replace(/^[.#]/, "");
         if (!uniqueClasses.has(className)) {
           uniqueClasses.add(className);
-          const item = new vscode.CompletionItem(className, vscode.CompletionItemKind.Class);
+          const item = new vscode.CompletionItem(
+            className,
+            vscode.CompletionItemKind.Class,
+          );
           item.detail = "BEM (External)";
           items.push(item);
         }

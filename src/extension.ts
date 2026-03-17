@@ -315,7 +315,9 @@ export async function activate(context: vscode.ExtensionContext) {
         ) {
           for (const { symbols } of documentCache.styles) {
             for (const s of symbols) {
-              const className = s.fullSelector.replace(/^[.#]/, "");
+              const parts = s.fullSelector.split(" ");
+              const lastSelector = parts[parts.length - 1];
+              const className = lastSelector.replace(/^[.#]/, "");
               const item = new vscode.CompletionItem(
                 className,
                 vscode.CompletionItemKind.Class,
