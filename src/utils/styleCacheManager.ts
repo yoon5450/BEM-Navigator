@@ -8,7 +8,7 @@ export class StyleCacheManager {
   // 파일 URI 문자열을 키로 사용하는 캐시 저장소
   private cache = new Map<
     string,
-    { uri: vscode.Uri; symbols: StyleSymbol[] }
+    { uri: vscode.Uri; symbols: StyleSymbol[]; projectRoot: string }
   >();
   // 해당 프로젝트 루트 정보를 가지는 캐시 저장소
   private rootCache = new Map<string, string>();
@@ -33,8 +33,9 @@ export class StyleCacheManager {
       const fileData = await vscode.workspace.fs.readFile(uri);
       const content = Buffer.from(fileData).toString("utf8");
       const symbols = parseStylus(content);
+      const projectRoot = this.getActualProjectRoot(uri);
 
-      this.cache.set(uriStr, { uri, symbols });
+      this.cache.set(uriStr, { uri, symbols, projectRoot });
       console.log(`[Cache] Indexed: ${uriStr} (${symbols.length} symbols)`);
     } catch (e) {
       console.error(`[Cache Error] ${uri.fsPath}`, e);
@@ -95,33 +96,26 @@ export class StyleCacheManager {
     let projectFileCount = 0;
 
     for (const [_, data] of this.cache) {
-      const cachedPath = this.normalizePath(data.uri);
-      const cachedFileRoot = this.getActualProjectRoot(data.uri);
-
       // [Step 1] 프로젝트 루트 필터링
-      if (cachedFileRoot !== currentProjectRoot) {
+      if (data.projectRoot !== currentProjectRoot) {
         continue;
       }
 
+      const cachedPath = this.normalizePath(data.uri);
       projectFileCount++;
 
       // [Step 2] 매칭 시도
-      const foundSymbols = data.symbols.filter((s) => {
-        return (
+      const foundSymbols = data.symbols.filter(
+        (s) =>
           s.fullSelector === targetSelector ||
-          s.fullSelector.endsWith(" " + targetSelector)
-        );
-      });
+          s.fullSelector.endsWith(" " + targetSelector),
+      );
 
       if (foundSymbols.length > 0) {
         for (const symbol of foundSymbols) {
           const distance = this.calculateDistance(currentPath, cachedPath);
           const purityBonus = symbol.fullSelector === targetSelector ? 0 : 10;
           const totalScore = distance + purityBonus;
-
-          console.log(
-            `[Match] ${path.basename(cachedPath)} | Score: ${totalScore} (Dist: ${distance}, Purity: ${purityBonus}) | Selector: ${symbol.fullSelector}`,
-          );
 
           matches.push({
             uri: data.uri,
@@ -132,20 +126,7 @@ export class StyleCacheManager {
       }
     }
 
-    // [Step 3] 최종 결과 로그
-    console.log(
-      `📊 [Summary] Total files in project: ${projectFileCount}, Matches found: ${matches.length}`,
-    );
-
     const sortedMatches = matches.sort((a, b) => a.score - b.score);
-
-    if (sortedMatches.length > 0) {
-      console.log(
-        `🏆 [Best] ${path.basename(sortedMatches[0].uri.fsPath)} (${sortedMatches[0].score} pts)`,
-      );
-    } else {
-      console.log(`❌ [Result] No matches found within the same project root.`);
-    }
 
     return sortedMatches;
   }

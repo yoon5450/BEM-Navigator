@@ -187,7 +187,9 @@ export async function activate(context: vscode.ExtensionContext) {
         const cachedResults = cacheManager.findInFolder(target, document.uri);
 
         if (cachedResults && cachedResults.length > 0) {
-          return cachedResults.map((res) => {
+          const topResults = cachedResults.slice(0, 10);
+
+          return topResults.map((res) => {
             const line =
               typeof res.symbol.line === "number" ? res.symbol.line : 0;
             const char =
