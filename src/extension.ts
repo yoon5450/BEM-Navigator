@@ -47,15 +47,6 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  // 새 탭이 열릴 때마다 캐시 업데이트
-  context.subscriptions.push(
-    vscode.workspace.onDidOpenTextDocument((doc) => {
-      if (doc.languageId === "stylus" || doc.fileName.endsWith(".styl")) {
-        cacheManager.updateCache(doc.uri);
-      }
-    }),
-  );
-
   // 파일 감시자 설정
   const watcher = vscode.workspace.createFileSystemWatcher("**/*.styl");
 
@@ -221,124 +212,124 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBarItem);
 
   // Hover Provider 등록 (마우스 오버 미리보기)
-  const hoverProvider = vscode.languages.registerHoverProvider(
-    ["vue", "pug", "html"],
-    {
-      provideHover(document, position, token) {
-        const range = getBemRange(document, position);
-        if (!range) return null;
+  // const hoverProvider = vscode.languages.registerHoverProvider(
+  //   ["vue", "pug", "html"],
+  //   {
+  //     provideHover(document, position, token) {
+  //       const range = getBemRange(document, position);
+  //       if (!range) return null;
 
-        const rawTarget = document.getText(range);
-        const target = rawTarget.replace(/^[.#]/, "");
+  //       const rawTarget = document.getText(range);
+  //       const target = rawTarget.replace(/^[.#]/, "");
 
-        // 문서 내 캐시에서 먼저 찾기
-        if (
-          documentCache &&
-          documentCache.uri === document.uri.toString() &&
-          documentCache.version === document.version
-        ) {
-          for (const { symbols } of documentCache.styles) {
-            const found = symbols.find(
-              (s) =>
-                s.fullSelector === `.${target}` || s.fullSelector === target,
-            );
-            if (found) {
-              const markdown = new vscode.MarkdownString();
-              markdown.appendMarkdown(`💡 **BEM Navigator**\n\n`);
-              markdown.appendCodeblock(found.fullSelector, "stylus");
-              markdown.appendMarkdown(`\n📂 *Current File (<style> block)*`);
-              return new vscode.Hover(markdown, range);
-            }
-          }
-        }
+  //       // 문서 내 캐시에서 먼저 찾기
+  //       if (
+  //         documentCache &&
+  //         documentCache.uri === document.uri.toString() &&
+  //         documentCache.version === document.version
+  //       ) {
+  //         for (const { symbols } of documentCache.styles) {
+  //           const found = symbols.find(
+  //             (s) =>
+  //               s.fullSelector === `.${target}` || s.fullSelector === target,
+  //           );
+  //           if (found) {
+  //             const markdown = new vscode.MarkdownString();
+  //             markdown.appendMarkdown(`💡 **BEM Navigator**\n\n`);
+  //             markdown.appendCodeblock(found.fullSelector, "stylus");
+  //             markdown.appendMarkdown(`\n📂 *Current File (<style> block)*`);
+  //             return new vscode.Hover(markdown, range);
+  //           }
+  //         }
+  //       }
 
-        // 외부 파일 캐시 매니저에서 찾기
-        const cachedResults = cacheManager.findInFolder(target, document.uri);
-        if (cachedResults && cachedResults.length > 0) {
-          // 가장 거리가 가깝고 점수가 높은(Best Match) 1개만 표시
-          const bestMatch = cachedResults[0];
+  //       // 외부 파일 캐시 매니저에서 찾기
+  //       const cachedResults = cacheManager.findInFolder(target, document.uri);
+  //       if (cachedResults && cachedResults.length > 0) {
+  //         // 가장 거리가 가깝고 점수가 높은(Best Match) 1개만 표시
+  //         const bestMatch = cachedResults[0];
 
-          const markdown = new vscode.MarkdownString();
-          markdown.appendMarkdown(`💡 **BEM Selector**\n\n`);
-          markdown.appendCodeblock(bestMatch.symbol.fullSelector, "stylus");
+  //         const markdown = new vscode.MarkdownString();
+  //         markdown.appendMarkdown(`💡 **BEM Selector**\n\n`);
+  //         markdown.appendCodeblock(bestMatch.symbol.fullSelector, "stylus");
 
-          // 워크스페이스 상대 경로 추출 (보기 좋게 다듬기)
-          const workspaceFolder = vscode.workspace.getWorkspaceFolder(
-            bestMatch.uri,
-          );
-          const relativePath = workspaceFolder
-            ? vscode.workspace.asRelativePath(bestMatch.uri, false)
-            : bestMatch.uri.fsPath;
+  //         // 워크스페이스 상대 경로 추출 (보기 좋게 다듬기)
+  //         const workspaceFolder = vscode.workspace.getWorkspaceFolder(
+  //           bestMatch.uri,
+  //         );
+  //         const relativePath = workspaceFolder
+  //           ? vscode.workspace.asRelativePath(bestMatch.uri, false)
+  //           : bestMatch.uri.fsPath;
 
-          markdown.appendMarkdown(
-            `\n📂 \`${relativePath}\` (Line: ${bestMatch.symbol.line + 1})`,
-          );
+  //         markdown.appendMarkdown(
+  //           `\n📂 \`${relativePath}\` (Line: ${bestMatch.symbol.line + 1})`,
+  //         );
 
-          // 클릭하면 해당 파일로 바로 이동하는 커맨드 링크 추가
-          markdown.isTrusted = true;
-          const args = encodeURIComponent(
-            JSON.stringify([
-              bestMatch.uri,
-              {
-                selection: new vscode.Range(
-                  bestMatch.symbol.line,
-                  0,
-                  bestMatch.symbol.line,
-                  0,
-                ),
-              },
-            ]),
-          );
-          markdown.appendMarkdown(`\n\n$(go-to-file) 파일 열기`);
+  //         // 클릭하면 해당 파일로 바로 이동하는 커맨드 링크 추가
+  //         markdown.isTrusted = true;
+  //         const args = encodeURIComponent(
+  //           JSON.stringify([
+  //             bestMatch.uri,
+  //             {
+  //               selection: new vscode.Range(
+  //                 bestMatch.symbol.line,
+  //                 0,
+  //                 bestMatch.symbol.line,
+  //                 0,
+  //               ),
+  //             },
+  //           ]),
+  //         );
+  //         markdown.appendMarkdown(`\n\n$(go-to-file) 파일 열기`);
 
-          return new vscode.Hover(markdown, range);
-        }
+  //         return new vscode.Hover(markdown, range);
+  //       }
 
-        return null;
-      },
-    },
-  );
+  //       return null;
+  //     },
+  //   },
+  // );
 
-  context.subscriptions.push(hoverProvider);
+  // context.subscriptions.push(hoverProvider);
 
-  //  자동완성 (Completion Provider) 등록
-  const completionProvider = vscode.languages.registerCompletionItemProvider(
-    ["vue", "pug", "html"],
-    {
-      provideCompletionItems(document, position) {
-        //  외부 파일 캐시에서 중복 제거된 전체 클래스 목록 가져오기
-        const items = cacheManager.getCompletionItems(document.uri);
+  // //  자동완성 (Completion Provider) 등록
+  // const completionProvider = vscode.languages.registerCompletionItemProvider(
+  //   ["vue", "pug", "html"],
+  //   {
+  //     provideCompletionItems(document, position) {
+  //       //  외부 파일 캐시에서 중복 제거된 전체 클래스 목록 가져오기
+  //       const items = cacheManager.getCompletionItems(document.uri);
 
-        //  현재 파일 내부의 <style> 캐시도 병합
-        if (
-          documentCache &&
-          documentCache.uri === document.uri.toString() &&
-          documentCache.version === document.version
-        ) {
-          for (const { symbols } of documentCache.styles) {
-            for (const s of symbols) {
-              const parts = s.fullSelector.split(" ");
-              const lastSelector = parts[parts.length - 1];
-              const className = lastSelector.replace(/^[.#]/, "");
-              const item = new vscode.CompletionItem(
-                className,
-                vscode.CompletionItemKind.Class,
-              );
-              item.detail = "BEM (Current File)";
-              items.push(item);
-            }
-          }
-        }
+  //       //  현재 파일 내부의 <style> 캐시도 병합
+  //       if (
+  //         documentCache &&
+  //         documentCache.uri === document.uri.toString() &&
+  //         documentCache.version === document.version
+  //       ) {
+  //         for (const { symbols } of documentCache.styles) {
+  //           for (const s of symbols) {
+  //             const parts = s.fullSelector.split(" ");
+  //             const lastSelector = parts[parts.length - 1];
+  //             const className = lastSelector.replace(/^[.#]/, "");
+  //             const item = new vscode.CompletionItem(
+  //               className,
+  //               vscode.CompletionItemKind.Class,
+  //             );
+  //             item.detail = "BEM (Current File)";
+  //             items.push(item);
+  //           }
+  //         }
+  //       }
 
-        // 생성된 전체 목록을 반환하면, VS Code가 사용자의 타이핑에 맞춰 초고속 필터링을 수행합니다.
-        return items;
-      },
-    },
-    ".",
-    '"',
-    "'",
-    " ", // Trigger Characters: 이 문자들을 입력할 때 즉시 자동완성 창을 띄웁니다.
-  );
+  //       // 생성된 전체 목록을 반환하면, VS Code가 사용자의 타이핑에 맞춰 초고속 필터링을 수행합니다.
+  //       return items;
+  //     },
+  //   },
+  //   ".",
+  //   '"',
+  //   "'",
+  //   " ", // Trigger Characters: 이 문자들을 입력할 때 즉시 자동완성 창을 띄웁니다.
+  // );
 
-  context.subscriptions.push(completionProvider);
+  // context.subscriptions.push(completionProvider);
 }

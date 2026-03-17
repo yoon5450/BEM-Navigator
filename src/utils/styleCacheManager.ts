@@ -30,8 +30,19 @@ export class StyleCacheManager {
     if (!force && this.cache.has(uriStr)) return;
 
     try {
-      const fileData = await vscode.workspace.fs.readFile(uri);
-      const content = Buffer.from(fileData).toString("utf8");
+      let content = "";
+      // 이미 열려있는 문서인지 확인하여 메모리에서 직접 텍스트를 가져옴 (디스크 I/O 렉 방지)
+      const openDoc = vscode.workspace.textDocuments.find(
+        (doc) => this.normalizePath(doc.uri) === uriStr,
+      );
+
+      if (openDoc) {
+        content = openDoc.getText();
+      } else {
+        const fileData = await vscode.workspace.fs.readFile(uri);
+        content = Buffer.from(fileData).toString("utf8");
+      }
+
       const symbols = parseStylus(content);
       const projectRoot = this.getActualProjectRoot(uri);
 
