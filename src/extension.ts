@@ -183,7 +183,7 @@ export async function activate(context: vscode.ExtensionContext) {
           }
         }
 
-        // 2. 캐시 매니저를 통해 외부 파일 탐색
+        // 캐시 매니저를 통해 외부 파일 탐색
         const cachedResults = cacheManager.findInFolder(target, document.uri);
 
         if (cachedResults && cachedResults.length > 0) {
@@ -218,7 +218,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(provider);
   context.subscriptions.push(statusBarItem);
 
-  // 2. Hover Provider 등록 (마우스 오버 미리보기)
+  // Hover Provider 등록 (마우스 오버 미리보기)
   const hoverProvider = vscode.languages.registerHoverProvider(
     ["vue", "pug", "html"],
     {
@@ -229,7 +229,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const rawTarget = document.getText(range);
         const target = rawTarget.replace(/^[.#]/, "");
 
-        // 1) 문서 내 캐시에서 먼저 찾기
+        // 문서 내 캐시에서 먼저 찾기
         if (
           documentCache &&
           documentCache.uri === document.uri.toString() &&
@@ -250,7 +250,7 @@ export async function activate(context: vscode.ExtensionContext) {
           }
         }
 
-        // 2) 외부 파일 캐시 매니저에서 찾기
+        // 외부 파일 캐시 매니저에서 찾기
         const cachedResults = cacheManager.findInFolder(target, document.uri);
         if (cachedResults && cachedResults.length > 0) {
           // 가장 거리가 가깝고 점수가 높은(Best Match) 1개만 표시
@@ -272,7 +272,7 @@ export async function activate(context: vscode.ExtensionContext) {
             `\n📂 \`${relativePath}\` (Line: ${bestMatch.symbol.line + 1})`,
           );
 
-          // (선택 사항) 클릭하면 해당 파일로 바로 이동하는 커맨드 링크 추가
+          // 클릭하면 해당 파일로 바로 이동하는 커맨드 링크 추가
           markdown.isTrusted = true;
           const args = encodeURIComponent(
             JSON.stringify([
@@ -299,15 +299,15 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(hoverProvider);
 
-  // 3. 자동완성 (Completion Provider) 등록
+  //  자동완성 (Completion Provider) 등록
   const completionProvider = vscode.languages.registerCompletionItemProvider(
     ["vue", "pug", "html"],
     {
       provideCompletionItems(document, position) {
-        // 1) 외부 파일 캐시에서 중복 제거된 전체 클래스 목록 가져오기
+        //  외부 파일 캐시에서 중복 제거된 전체 클래스 목록 가져오기
         const items = cacheManager.getCompletionItems(document.uri);
 
-        // 2) 현재 파일 내부의 <style> 캐시도 병합
+        //  현재 파일 내부의 <style> 캐시도 병합
         if (
           documentCache &&
           documentCache.uri === document.uri.toString() &&
