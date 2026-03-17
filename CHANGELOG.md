@@ -17,3 +17,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ### ✨ UX Improvements (사용자 경험 개선)
 
 - **정의 찾기 실패 알림:** 매칭되는 스타일 정의를 찾지 못했을 때 조용히 실패하는 대신, 우측 하단에 알림(Toast) 창으로 명확한 피드백 메시지를 제공합니다.
+
+## [0.0.4 테스트 패치노트]
+
+- **자동완성 기능 추가:** 코드 작성 시에 자동완성되는 미리보기를 볼 수 있습니다.

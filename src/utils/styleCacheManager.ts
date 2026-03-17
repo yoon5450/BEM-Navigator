@@ -151,6 +151,30 @@ export class StyleCacheManager {
   }
 
   /**
+   * 자동완성을 위해 현재 프로젝트의 모든 캐시된 클래스 목록을 반환합니다.
+   */
+  public getCompletionItems(currentDocUri: vscode.Uri): vscode.CompletionItem[] {
+    const items: vscode.CompletionItem[] = [];
+    const uniqueClasses = new Set<string>();
+    const currentProjectRoot = this.getActualProjectRoot(currentDocUri);
+
+    for (const [_, data] of this.cache) {
+      if (this.getActualProjectRoot(data.uri) !== currentProjectRoot) continue;
+
+      for (const symbol of data.symbols) {
+        const className = symbol.fullSelector.replace(/^[.#]/, "");
+        if (!uniqueClasses.has(className)) {
+          uniqueClasses.add(className);
+          const item = new vscode.CompletionItem(className, vscode.CompletionItemKind.Class);
+          item.detail = "BEM (External)";
+          items.push(item);
+        }
+      }
+    }
+    return items;
+  }
+
+  /**
    * 두 파일 경로 사이의 물리적 거리를 계산합니다.
    * 점수가 낮을수록 두 파일은 같은 폴더 혹은 인접 폴더에 있습니다.
    */

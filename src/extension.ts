@@ -298,4 +298,43 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(hoverProvider);
+
+  // 3. 자동완성 (Completion Provider) 등록
+  const completionProvider = vscode.languages.registerCompletionItemProvider(
+    ["vue", "pug", "html"],
+    {
+      provideCompletionItems(document, position) {
+        // 1) 외부 파일 캐시에서 중복 제거된 전체 클래스 목록 가져오기
+        const items = cacheManager.getCompletionItems(document.uri);
+
+        // 2) 현재 파일 내부의 <style> 캐시도 병합
+        if (
+          documentCache &&
+          documentCache.uri === document.uri.toString() &&
+          documentCache.version === document.version
+        ) {
+          for (const { symbols } of documentCache.styles) {
+            for (const s of symbols) {
+              const className = s.fullSelector.replace(/^[.#]/, "");
+              const item = new vscode.CompletionItem(
+                className,
+                vscode.CompletionItemKind.Class,
+              );
+              item.detail = "BEM (Current File)";
+              items.push(item);
+            }
+          }
+        }
+
+        // 생성된 전체 목록을 반환하면, VS Code가 사용자의 타이핑에 맞춰 초고속 필터링을 수행합니다.
+        return items;
+      },
+    },
+    ".",
+    '"',
+    "'",
+    " ", // Trigger Characters: 이 문자들을 입력할 때 즉시 자동완성 창을 띄웁니다.
+  );
+
+  context.subscriptions.push(completionProvider);
 }
