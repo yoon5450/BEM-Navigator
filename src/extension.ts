@@ -17,6 +17,14 @@ export async function activate(context: vscode.ExtensionContext) {
   console.log("🚀 BEM-Navigator 활성화됨");
   const cacheManager = new StyleCacheManager();
 
+  // 1. 상태 표시줄 아이템 생성
+  const statusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    100,
+  );
+  statusBarItem.text = "$(sync~spin) BEM: 인덱싱 중...";
+  statusBarItem.show();
+
   const activeEditor = vscode.window.activeTextEditor;
   if (activeEditor) {
     const folder = vscode.workspace.getWorkspaceFolder(
@@ -24,9 +32,13 @@ export async function activate(context: vscode.ExtensionContext) {
     );
     if (folder) {
       const currentDir = new vscode.RelativePattern(folder, "**/*.styl");
+      const excludeDir = new vscode.RelativePattern(
+        folder,
+        "**/node_modules/**",
+      );
       const priorityFiles = await vscode.workspace.findFiles(
         currentDir,
-        "**/node_modules/**",
+        excludeDir,
         10,
       );
       for (const file of priorityFiles) {
@@ -55,18 +67,42 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // 심볼릭 고려
   // 프로젝트 폴더별로 src/style, styles 내 파일들을 백그라운드 인덱싱
-  vscode.workspace.workspaceFolders?.forEach((folder) => {
+  const folders = vscode.workspace.workspaceFolders || [];
+  if (folders.length === 0) {
+    statusBarItem.hide();
+  }
+  const indexingPromises = folders.map((folder) => {
     const pattern = new vscode.RelativePattern(folder, "**/*.styl");
+    const excludePattern = new vscode.RelativePattern(
+      folder,
+      "**/node_modules/**",
+    );
 
-    vscode.workspace
-      .findFiles(pattern, "**/node_modules/**")
+    return vscode.workspace
+      .findFiles(pattern, excludePattern)
       .then(async (files) => {
         console.log(`📂 [${folder.name}] 검색된 총 파일 수: ${files.length}`);
 
-        for (const file of files) {
-          cacheManager.updateCache(file);
+        // EMFILE 에러 방지 및 캐싱 속도 향상을 위해 50개씩 병렬(Chunk) 처리
+        const chunkSize = 50;
+        for (let i = 0; i < files.length; i += chunkSize) {
+          const chunk = files.slice(i, i + chunkSize);
+          await Promise.all(
+            chunk.map((file) => cacheManager.updateCache(file)),
+          );
         }
+
+        console.log(`✅ [${folder.name}] 백그라운드 인덱싱 완료!`);
       });
+  });
+
+  // 모든 워크스페이스의 인덱싱이 끝나면 상태 표시줄 업데이트
+  Promise.all(indexingPromises).then(() => {
+    statusBarItem.text = "$(check) BEM: 인덱싱 완료";
+    // 3초 후 상태 표시줄 숨김
+    setTimeout(() => {
+      statusBarItem.hide();
+    }, 3000);
   });
 
   const provider = vscode.languages.registerDefinitionProvider(
@@ -170,10 +206,96 @@ export async function activate(context: vscode.ExtensionContext) {
             };
           });
         }
+
+        vscode.window.showInformationMessage(
+          `'${target}' 정의를 찾을 수 없습니다.`,
+        );
         return null;
       },
     },
   );
 
   context.subscriptions.push(provider);
+  context.subscriptions.push(statusBarItem);
+
+  // 2. Hover Provider 등록 (마우스 오버 미리보기)
+  const hoverProvider = vscode.languages.registerHoverProvider(
+    ["vue", "pug", "html"],
+    {
+      provideHover(document, position, token) {
+        const range = getBemRange(document, position);
+        if (!range) return null;
+
+        const rawTarget = document.getText(range);
+        const target = rawTarget.replace(/^[.#]/, "");
+
+        // 1) 문서 내 캐시에서 먼저 찾기
+        if (
+          documentCache &&
+          documentCache.uri === document.uri.toString() &&
+          documentCache.version === document.version
+        ) {
+          for (const { symbols } of documentCache.styles) {
+            const found = symbols.find(
+              (s) =>
+                s.fullSelector === `.${target}` || s.fullSelector === target,
+            );
+            if (found) {
+              const markdown = new vscode.MarkdownString();
+              markdown.appendMarkdown(`💡 **BEM Navigator**\n\n`);
+              markdown.appendCodeblock(found.fullSelector, "stylus");
+              markdown.appendMarkdown(`\n📂 *Current File (<style> block)*`);
+              return new vscode.Hover(markdown, range);
+            }
+          }
+        }
+
+        // 2) 외부 파일 캐시 매니저에서 찾기
+        const cachedResults = cacheManager.findInFolder(target, document.uri);
+        if (cachedResults && cachedResults.length > 0) {
+          // 가장 거리가 가깝고 점수가 높은(Best Match) 1개만 표시
+          const bestMatch = cachedResults[0];
+
+          const markdown = new vscode.MarkdownString();
+          markdown.appendMarkdown(`💡 **BEM Selector**\n\n`);
+          markdown.appendCodeblock(bestMatch.symbol.fullSelector, "stylus");
+
+          // 워크스페이스 상대 경로 추출 (보기 좋게 다듬기)
+          const workspaceFolder = vscode.workspace.getWorkspaceFolder(
+            bestMatch.uri,
+          );
+          const relativePath = workspaceFolder
+            ? vscode.workspace.asRelativePath(bestMatch.uri, false)
+            : bestMatch.uri.fsPath;
+
+          markdown.appendMarkdown(
+            `\n📂 \`${relativePath}\` (Line: ${bestMatch.symbol.line + 1})`,
+          );
+
+          // (선택 사항) 클릭하면 해당 파일로 바로 이동하는 커맨드 링크 추가
+          markdown.isTrusted = true;
+          const args = encodeURIComponent(
+            JSON.stringify([
+              bestMatch.uri,
+              {
+                selection: new vscode.Range(
+                  bestMatch.symbol.line,
+                  0,
+                  bestMatch.symbol.line,
+                  0,
+                ),
+              },
+            ]),
+          );
+          markdown.appendMarkdown(`\n\n$(go-to-file) 파일 열기`);
+
+          return new vscode.Hover(markdown, range);
+        }
+
+        return null;
+      },
+    },
+  );
+
+  context.subscriptions.push(hoverProvider);
 }

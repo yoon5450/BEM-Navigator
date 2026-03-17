@@ -75,8 +75,6 @@ export class StyleCacheManager {
    * 특정 폴더(workspaceFolder) 내에 있는 캐시만 검색하되,
    * 현재 파일과 가장 가까운 경로를 우선적으로 탐색합니다.
    */
-  // src/utils/styleCacheManager.ts
-
   public findInFolder(
     target: string,
     currentDocUri: vscode.Uri,
