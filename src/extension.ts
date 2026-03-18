@@ -200,9 +200,6 @@ export async function activate(context: vscode.ExtensionContext) {
           });
         }
 
-        vscode.window.showInformationMessage(
-          `'${target}' 정의를 찾을 수 없습니다.`,
-        );
         return null;
       },
     },
