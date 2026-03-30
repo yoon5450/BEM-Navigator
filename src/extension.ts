@@ -13,6 +13,33 @@ let documentCache: {
   styles: { symbols: StyleSymbol[]; offset: number }[];
 } | null = null;
 
+function isInsideVueScriptBlock(
+  document: vscode.TextDocument,
+  position: vscode.Position,
+): boolean {
+  if (document.languageId !== "vue") return false;
+
+  const text = document.getText();
+  const currentOffset = document.offsetAt(position);
+  const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = scriptRegex.exec(text)) !== null) {
+    const scriptContent = match[1];
+    const scriptStartOffset = match.index + match[0].indexOf(scriptContent);
+    const scriptEndOffset = scriptStartOffset + scriptContent.length;
+
+    if (
+      currentOffset >= scriptStartOffset &&
+      currentOffset <= scriptEndOffset
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   console.log("🚀 BEM-Navigator 활성화됨");
   const cacheManager = new StyleCacheManager();
@@ -104,6 +131,10 @@ export async function activate(context: vscode.ExtensionContext) {
         position: vscode.Position,
         token: vscode.CancellationToken,
       ): Promise<vscode.Definition | vscode.LocationLink[] | null> {
+        if (isInsideVueScriptBlock(document, position)) {
+          return null;
+        }
+
         // 프로젝트 경로 가져옴
         console.log(`현재 캐시된 파일 개수: ${cacheManager["cache"].size}`);
         const currentFolder = vscode.workspace.getWorkspaceFolder(document.uri);
@@ -213,6 +244,8 @@ export async function activate(context: vscode.ExtensionContext) {
     ["vue", "pug", "html"],
     {
       provideHover(document, position, token) {
+        if (isInsideVueScriptBlock(document, position)) return null;
+
         const range = getBemRange(document, position);
         if (!range) return null;
 
